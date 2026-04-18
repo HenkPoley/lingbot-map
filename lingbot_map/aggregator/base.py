@@ -120,8 +120,6 @@ class AggregatorBase(nn.Module, ABC):
         self.pretrained_path = pretrained_path
         self.enable_ulysses_cp = False  # CP disabled
 
-        print("pretrained_path:", self.pretrained_path)
-
         # Validate depth
         if self.depth % self.aa_block_size != 0:
             raise ValueError(f"depth ({depth}) must be divisible by aa_block_size ({aa_block_size})")
@@ -217,18 +215,23 @@ class AggregatorBase(nn.Module, ABC):
                 init_values=init_values,
             )
 
-            # Load pretrained weights
-            try:
-                ckpt = torch.load(pretrained_path)
-                del ckpt['pos_embed']
-                logger.info("Loading pretrained weights for DINOv2")
-                missing, unexpected = self.patch_embed.load_state_dict(ckpt, strict=False)
-                logger.info(f"Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
+            # Load standalone DINOv2 bootstrap weights only when explicitly supplied.
+            # The released LingBot checkpoint loaded later already contains these
+            # weights, so the default empty path should be silent.
+            if pretrained_path:
+                try:
+                    ckpt = torch.load(pretrained_path)
+                    del ckpt['pos_embed']
+                    logger.info("Loading pretrained weights for DINOv2")
+                    missing, unexpected = self.patch_embed.load_state_dict(ckpt, strict=False)
+                    logger.info(f"Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
 
-                # Store checkpoint for block initialization
-                self._dino_checkpoint = ckpt
-            except Exception as e:
-                logger.warning(f"Failed to load pretrained weights: {e}")
+                    # Store checkpoint for block initialization
+                    self._dino_checkpoint = ckpt
+                except Exception as e:
+                    logger.warning(f"Failed to load pretrained weights: {e}")
+                    self._dino_checkpoint = None
+            else:
                 self._dino_checkpoint = None
 
             # Disable gradients for mask token
